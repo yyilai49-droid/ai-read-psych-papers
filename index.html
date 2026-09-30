@@ -1,0 +1,1628 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>用 AI 读心理学论文</title>
+<meta name="description" content="面向心理学本科生的 AI 辅助论文阅读手册：五遍读法、可复制的 Prompt 模板库、六个常见的坑。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* ============================================================
+   设计令牌 —— 浅色为基准定义，深色按同一组令牌重定义。
+   配色经 OKLab 亮度带 / 色度下限 / CVD 分离度 / WCAG 对比度四项校验：
+   浅色对 正常 ΔE 23.2、最差 CVD 10.3；深色对 正常 ΔE 26.2、最差 CVD 11.2。
+   ============================================================ */
+:root{
+  --ground:#F1F4F2;
+  --surface:#FFFFFF;
+  --block:#E7ECE9;
+  --sunken:#E2E8E5;
+  --ink:#0F1613;
+  --ink-2:#3D4A45;
+  --ink-3:#68766F;
+  --rule:#D3DCD8;
+  --rule-strong:#B6C2BD;
+  --accent:#0B6B5B;
+  --accent-soft:#DCEBE7;
+  --warn:#A8331C;
+  --warn-soft:#F3E1DC;
+  --accent-text:#0B6B5B;
+  --warn-text:#A8331C;
+
+  --mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;
+  --sans:'Noto Sans SC','Source Han Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+
+  --measure:66ch;
+  --rail:236px;
+  --pad:clamp(16px,4vw,40px);
+  --radius:10px;
+  --radius-sm:6px;
+  --shadow:0 1px 2px rgba(15,22,19,.05),0 8px 24px -12px rgba(15,22,19,.16);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0D1211;
+    --surface:#141B19;
+    --block:#1D2624;
+    --sunken:#181F1D;
+    --ink:#E8EFEC;
+    --ink-2:#B4C2BD;
+    --ink-3:#8A9A94;
+    --rule:#2A3532;
+    --rule-strong:#3B4844;
+    --accent:#43A08D;
+    --accent-soft:#16302B;
+    --warn:#DF5338;
+    --warn-soft:#331B15;
+    --accent-text:#68D4BC;
+    --warn-text:#EDA191;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0D1211;
+  --surface:#141B19;
+  --block:#1D2624;
+  --sunken:#181F1D;
+  --ink:#E8EFEC;
+  --ink-2:#B4C2BD;
+  --ink-3:#8A9A94;
+  --rule:#2A3532;
+  --rule-strong:#3B4844;
+  --accent:#43A08D;
+  --accent-soft:#16302B;
+  --warn:#DF5338;
+  --warn-soft:#331B15;
+  --accent-text:#68D4BC;
+  --warn-text:#EDA191;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -12px rgba(0,0,0,.6);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{
+  margin:0;
+  padding:0 var(--pad);
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+/* 语言切换：默认中文；html[data-lang="en"] 时只显示英文 */
+html[data-lang="en"] .zh{display:none}
+html:not([data-lang="en"]) .en{display:none}
+
+/* ---------- 顶栏 ---------- */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  margin:0 calc(var(--pad) * -1);
+  padding:10px var(--pad) 10px;
+  background:color-mix(in srgb,var(--ground) 88%,transparent);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--rule);
+  display:flex;align-items:center;gap:14px;
+}
+.topbar .brand{
+  font-family:var(--mono);font-size:.78rem;font-weight:600;
+  letter-spacing:.06em;color:var(--ink);
+  text-decoration:none;white-space:nowrap;
+}
+.topbar .brand span{color:var(--ink-3);font-weight:400}
+.topbar .spacer{flex:1}
+.tbtn{
+  font-family:var(--mono);font-size:.74rem;font-weight:500;
+  letter-spacing:.05em;
+  color:var(--ink-2);background:var(--surface);
+  border:1px solid var(--rule-strong);border-radius:var(--radius-sm);
+  padding:5px 11px;cursor:pointer;
+  transition:color .15s,border-color .15s,background .15s;
+}
+.tbtn:hover{color:var(--accent-text);border-color:var(--accent)}
+.tbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.progress{
+  position:fixed;top:0;left:0;height:2px;width:0;
+  background:var(--accent);z-index:50;transition:width .1s linear;
+}
+
+/* ---------- 版式骨架 ---------- */
+.shell{
+  max-width:1180px;margin:0 auto;
+  display:grid;grid-template-columns:var(--rail) minmax(0,1fr);
+  gap:clamp(24px,4vw,56px);
+  padding-block:clamp(28px,5vw,56px) 0;
+  align-items:start;
+}
+.rail{position:sticky;top:76px;display:flex;flex-direction:column;gap:2px}
+.rail-title{
+  font-family:var(--mono);font-size:.68rem;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  margin:0 0 10px 11px;
+}
+.rail a{
+  display:flex;gap:9px;align-items:baseline;
+  padding:6px 11px;border-radius:var(--radius-sm);
+  color:var(--ink-2);text-decoration:none;
+  font-size:.875rem;line-height:1.45;
+  border-left:2px solid transparent;
+  transition:color .14s,background .14s,border-color .14s;
+}
+.rail a .n{
+  font-family:var(--mono);font-size:.7rem;font-weight:600;
+  color:var(--ink-3);flex:none;min-width:1.5em;
+}
+.rail a:hover{color:var(--ink);background:var(--block)}
+.rail a.on{color:var(--accent-text);border-left-color:var(--accent);background:var(--accent-soft)}
+.rail a.on .n{color:var(--accent-text)}
+.rail a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+main{min-width:0;display:flex;flex-direction:column;gap:clamp(40px,7vw,72px)}
+
+/* ---------- 英雄区 ---------- */
+.hero{display:flex;flex-direction:column;gap:18px;padding-block:clamp(8px,3vw,28px)}
+.eyebrow{
+  font-family:var(--mono);font-size:.7rem;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--accent-text);
+  display:flex;align-items:center;gap:10px;margin:0;
+}
+.eyebrow::after{content:"";flex:1;height:1px;background:var(--rule)}
+h1{
+  font-size:clamp(2rem,5.4vw,3.1rem);
+  line-height:1.16;font-weight:700;letter-spacing:-.015em;
+  margin:0;text-wrap:balance;
+}
+.hero .lede{
+  font-size:clamp(1rem,1.6vw,1.14rem);color:var(--ink-2);
+  max-width:56ch;margin:0;
+}
+.hero-meta{
+  display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;
+}
+.chip{
+  font-family:var(--mono);font-size:.72rem;font-weight:500;
+  letter-spacing:.04em;color:var(--ink-2);
+  background:var(--surface);border:1px solid var(--rule);
+  border-radius:999px;padding:4px 12px;
+}
+
+/* ---------- 章节 ---------- */
+section{scroll-margin-top:80px;display:flex;flex-direction:column;gap:18px}
+.sec-head{display:flex;flex-direction:column;gap:8px}
+.sec-num{
+  font-family:var(--mono);font-size:.72rem;font-weight:600;
+  letter-spacing:.14em;color:var(--ink-3);
+}
+h2{
+  font-size:clamp(1.4rem,3vw,1.95rem);line-height:1.25;font-weight:700;
+  letter-spacing:-.01em;margin:0;text-wrap:balance;
+}
+h2+.sub{color:var(--ink-2);margin:0;max-width:var(--measure);font-size:.98rem}
+h3{
+  font-size:1.02rem;font-weight:700;margin:0;letter-spacing:-.005em;
+}
+p{margin:0;max-width:var(--measure)}
+ul,ol{margin:0;padding-left:1.3em;max-width:var(--measure);display:flex;flex-direction:column;gap:7px}
+li::marker{color:var(--ink-3)}
+li>strong{color:var(--ink)}
+a{color:var(--accent-text);text-underline-offset:2px}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+code{
+  font-family:var(--mono);font-size:.88em;
+  background:var(--block);border-radius:4px;padding:1px 5px;
+}
+strong{font-weight:700}
+
+/* ---------- 卡片 / 面板 ---------- */
+.panel{
+  background:var(--surface);border:1px solid var(--rule);
+  border-radius:var(--radius);padding:clamp(16px,2.6vw,24px);
+  display:flex;flex-direction:column;gap:14px;
+}
+.panel.tint{background:var(--block);border-color:transparent}
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:14px}
+.split>*{min-width:0}
+
+/* 能做 / 不能做 */
+.cando{display:flex;flex-direction:column;gap:11px}
+.cando .tag{
+  font-family:var(--mono);font-size:.72rem;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;
+  display:inline-flex;align-items:center;gap:7px;
+}
+.cando.yes .tag{color:var(--accent-text)}
+.cando.no .tag{color:var(--warn-text)}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:currentColor}
+.cando ul{font-size:.94rem;max-width:none}
+
+/* 警示条 */
+.redline{
+  border:1px solid var(--warn);border-left-width:3px;
+  background:var(--warn-soft);
+  border-radius:var(--radius-sm);
+  padding:14px 16px;display:flex;flex-direction:column;gap:9px;
+}
+.redline .tag{
+  font-family:var(--mono);font-size:.72rem;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--warn-text);
+  display:flex;align-items:center;gap:7px;
+}
+.redline ul{font-size:.93rem;max-width:none}
+
+/* ---------- 五遍读法：编号是真实序列，所以用编号 ---------- */
+.passes{display:flex;flex-direction:column;gap:14px}
+.pass{
+  display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;
+  background:var(--surface);border:1px solid var(--rule);
+  border-radius:var(--radius);padding:clamp(15px,2.4vw,22px);
+}
+.pass .idx{
+  font-family:var(--mono);font-size:1.5rem;font-weight:600;line-height:1;
+  color:var(--accent-text);letter-spacing:-.02em;padding-top:2px;
+}
+.pass .body{display:flex;flex-direction:column;gap:11px;min-width:0}
+.pass .head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px}
+.pass .head h3{font-size:1.06rem}
+.pass .time{
+  font-family:var(--mono);font-size:.7rem;font-weight:500;
+  letter-spacing:.05em;color:var(--ink-3);
+  border:1px solid var(--rule);border-radius:999px;padding:2px 9px;
+}
+.pass .ask{
+  font-size:.92rem;background:var(--block);border-radius:var(--radius-sm);
+  padding:10px 13px;display:flex;flex-direction:column;gap:5px;
+}
+.pass .ask .k{
+  font-family:var(--mono);font-size:.68rem;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+}
+.pass .out{
+  font-size:.9rem;color:var(--ink-2);
+  display:flex;gap:8px;align-items:baseline;
+}
+.pass .out .k{
+  font-family:var(--mono);font-size:.68rem;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  flex:none;padding-top:2px;
+}
+
+/* ---------- Prompt 模板块：提示词是代码状的物件，所以用等宽 ---------- */
+.tpl-group{display:flex;flex-direction:column;gap:12px}
+.tpl-group>.glabel{
+  font-family:var(--mono);font-size:.72rem;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  display:flex;align-items:center;gap:10px;
+}
+.tpl-group>.glabel::after{content:"";flex:1;height:1px;background:var(--rule)}
+
+.tpl{
+  background:var(--sunken);border:1px solid var(--rule);
+  border-left:3px solid var(--accent);
+  border-radius:var(--radius-sm);
+  overflow:hidden;
+}
+.tpl.warn-edge{border-left-color:var(--warn)}
+.tpl-head{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px;border-bottom:1px solid var(--rule);
+  background:color-mix(in srgb,var(--block) 60%,transparent);
+}
+.tpl-head .id{
+  font-family:var(--mono);font-size:.7rem;font-weight:600;
+  letter-spacing:.08em;color:var(--accent-text);flex:none;
+}
+.tpl.warn-edge .tpl-head .id{color:var(--warn-text)}
+.tpl-head .ttl{
+  font-size:.86rem;font-weight:500;color:var(--ink);flex:1;min-width:0;
+}
+.copy{
+  font-family:var(--mono);font-size:.68rem;font-weight:600;
+  letter-spacing:.06em;
+  color:var(--ink-2);background:var(--surface);
+  border:1px solid var(--rule-strong);border-radius:4px;
+  padding:4px 10px;cursor:pointer;flex:none;
+  transition:color .15s,border-color .15s,background .15s;
+}
+.copy:hover{color:var(--accent-text);border-color:var(--accent)}
+.copy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.copy.done{color:var(--accent-text);border-color:var(--accent);background:var(--accent-soft)}
+.tpl pre{
+  margin:0;padding:14px 15px;
+  font-family:var(--mono);font-size:.8rem;line-height:1.72;
+  color:var(--ink);white-space:pre-wrap;word-break:break-word;
+}
+.tpl .note{
+  font-size:.82rem;color:var(--ink-3);padding:0 15px 13px;
+  display:flex;gap:7px;align-items:baseline;
+}
+.tpl .note::before{content:"↳";color:var(--ink-3);flex:none}
+
+/* ---------- 表格 ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:var(--radius);background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:.88rem}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{
+  font-family:var(--mono);font-size:.7rem;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);
+  background:var(--block);white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:none}
+td strong{color:var(--ink)}
+
+/* ---------- 坑 ---------- */
+.pit{
+  background:var(--surface);border:1px solid var(--rule);
+  border-top:3px solid var(--warn);
+  border-radius:var(--radius);padding:clamp(15px,2.4vw,20px);
+  display:flex;flex-direction:column;gap:10px;
+}
+.pit .pid{
+  font-family:var(--mono);font-size:.7rem;font-weight:600;
+  letter-spacing:.1em;color:var(--warn-text);
+}
+.pit h3{font-size:1rem}
+.pit p{font-size:.9rem;color:var(--ink-2)}
+.fix{
+  font-size:.88rem;background:var(--block);border-radius:var(--radius-sm);
+  padding:10px 13px;display:flex;flex-direction:column;gap:5px;
+}
+.fix .k{
+  font-family:var(--mono);font-size:.68rem;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--accent-text);
+}
+
+/* ---------- 术语表 ---------- */
+.glossary{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:0 26px}
+.gitem{
+  padding:13px 0;border-bottom:1px solid var(--rule);
+  display:flex;flex-direction:column;gap:5px;
+}
+.gitem dt{
+  font-weight:700;font-size:.94rem;color:var(--ink);
+  display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
+}
+.gitem dt .en-term{
+  font-family:var(--mono);font-size:.76rem;font-weight:400;color:var(--ink-3);
+}
+.gitem dd{margin:0;font-size:.88rem;color:var(--ink-2)}
+
+/* ---------- 自测 ---------- */
+.qa{
+  background:var(--surface);border:1px solid var(--rule);
+  border-radius:var(--radius-sm);overflow:hidden;
+}
+.qa summary{
+  cursor:pointer;padding:12px 15px;
+  font-size:.92rem;font-weight:500;
+  display:flex;gap:11px;align-items:baseline;
+  list-style:none;
+}
+.qa summary::-webkit-details-marker{display:none}
+.qa summary::before{
+  content:"Q";font-family:var(--mono);font-size:.72rem;font-weight:600;
+  color:var(--accent-text);flex:none;
+}
+.qa summary:hover{background:var(--block)}
+.qa summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.qa .ans{
+  padding:0 15px 14px 15px;font-size:.89rem;color:var(--ink-2);
+  border-top:1px solid var(--rule);padding-top:12px;margin-top:0;
+}
+.qa[open] summary{border-bottom:1px solid var(--rule)}
+
+/* ---------- 页脚 ---------- */
+footer{
+  margin:clamp(48px,8vw,90px) calc(var(--pad) * -1) 0;
+  padding:clamp(30px,5vw,48px) var(--pad) calc(clamp(30px,5vw,48px) + env(safe-area-inset-bottom,0px));
+  background:var(--surface);border-top:1px solid var(--rule);
+}
+.foot-in{
+  max-width:1180px;margin:0 auto;
+  display:flex;flex-direction:column;gap:16px;
+}
+.foot-in .who{
+  font-size:1.12rem;font-weight:700;letter-spacing:-.01em;
+}
+.foot-in .rows{display:flex;flex-direction:column;gap:6px}
+.foot-in .row{
+  display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;
+  font-size:.9rem;color:var(--ink-2);
+}
+.foot-in .row .k{
+  font-family:var(--mono);font-size:.68rem;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  min-width:72px;
+}
+.foot-in .fine{
+  font-size:.8rem;color:var(--ink-3);
+  border-top:1px solid var(--rule);padding-top:14px;max-width:70ch;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:28px}
+  .rail{
+    position:static;
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));
+    gap:4px;padding-bottom:16px;border-bottom:1px solid var(--rule);
+  }
+  .rail-title{grid-column:1/-1;margin-left:0}
+  .rail a{border-left:none;border:1px solid var(--rule)}
+  .rail a.on{border-color:var(--accent)}
+}
+@media (max-width:560px){
+  body{font-size:15.5px}
+  .pass{grid-template-columns:minmax(0,1fr);gap:9px}
+  .pass .idx{font-size:1.25rem}
+  .glossary{grid-template-columns:minmax(0,1fr)}
+  .topbar .brand span{display:none}
+  .tpl-head{flex-wrap:wrap}
+  .tpl-head .ttl{flex-basis:100%;order:3}
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *{transition-duration:.01ms !important;animation-duration:.01ms !important}
+}
+
+/* ---------- 打印 / 导出 PDF ----------
+   打印稿强制中文单语：双语对照在纸上会挤成一团。 */
+@media print{
+  :root{
+    --ground:#FFFFFF;--surface:#FFFFFF;--block:#F2F5F3;--sunken:#F7F9F8;
+    --ink:#000000;--ink-2:#2C3532;--ink-3:#5A6660;
+    --rule:#C8D2CE;--rule-strong:#9FAEA8;
+  }
+  html[data-lang="en"] .zh{display:inline}
+  html[data-lang="en"] .en{display:inline}
+  .en{display:none !important}
+  .rail,.topbar,.progress,.copy{display:none !important}
+  body{font-size:10.5pt;line-height:1.6;padding:0}
+  .shell{display:block;max-width:none;padding-block:0}
+  main{gap:22px}
+  h1{font-size:22pt}
+  h2{font-size:15pt}
+  h3{font-size:11.5pt}
+  section{break-inside:auto}
+  h2,h3{break-after:avoid}
+  .panel,.pass,.pit,.qa,.tpl,.tw{break-inside:avoid;box-shadow:none}
+  /* 纸质版必须给出答案：屏幕上折叠的 details 在打印稿里要全部展开。
+     Chrome 对收起状态的隐藏走 shadow slot，只写 CSS 不保险，
+     所以这里同时兜底，并在脚本里监听 beforeprint 真的把 open 加上。 */
+  .qa{border:1px solid var(--rule)}
+  .qa summary{font-weight:700;border-bottom:1px solid var(--rule)}
+  .qa .ans,.qa>.ans{display:block !important;visibility:visible !important}
+  .tpl pre{font-size:8.6pt;line-height:1.5}
+  footer{margin:28px 0 0;padding:18px 0 0;border-top:1px solid var(--rule)}
+  a{color:var(--ink);text-decoration:none}
+  @page{margin:14mm 15mm}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="brand" href="#top">用 AI 读心理学论文<span> / BSU心理学院</span></a>
+  <div class="spacer"></div>
+  <button class="tbtn" id="langBtn" type="button" aria-label="切换语言 / Switch language">EN</button>
+  <button class="tbtn" id="themeBtn" type="button" aria-label="切换深浅色 / Toggle theme">◐</button>
+</header>
+
+<div class="shell" id="top">
+  <nav class="rail" aria-label="章节导航">
+    <p class="rail-title"><span class="zh">目录</span><span class="en">Contents</span></p>
+    <a href="#rules"><span class="n">01</span><span class="zh">先立规矩</span><span class="en">Ground rules</span></a>
+    <a href="#why"><span class="n">02</span><span class="zh">为什么难读</span><span class="en">Why it's hard</span></a>
+    <a href="#prep"><span class="n">03</span><span class="zh">准备工作</span><span class="en">Setup</span></a>
+    <a href="#five"><span class="n">04</span><span class="zh">五遍读法</span><span class="en">Five passes</span></a>
+    <a href="#prompts"><span class="n">05</span><span class="zh">Prompt 模板库</span><span class="en">Prompt library</span></a>
+    <a href="#tools"><span class="n">06</span><span class="zh">工具怎么选</span><span class="en">Choosing a tool</span></a>
+    <a href="#traps"><span class="n">07</span><span class="zh">六个常见的坑</span><span class="en">Six traps</span></a>
+    <a href="#glossary"><span class="n">08</span><span class="zh">术语速查</span><span class="en">Glossary</span></a>
+    <a href="#quiz"><span class="n">09</span><span class="zh">自测</span><span class="en">Self-check</span></a>
+  </nav>
+
+  <main>
+    <!-- ============ 英雄区 ============ -->
+    <div class="hero">
+      <p class="eyebrow"><span class="zh">AI 辅助论文阅读手册</span><span class="en">AI-assisted reading manual</span></p>
+      <h1>
+        <span class="zh">用 AI 读心理学论文</span>
+        <span class="en">Reading Psychology Papers with AI</span>
+      </h1>
+      <p class="lede">
+        <span class="zh">AI 不会替你读懂一篇论文，但它可以是你身边最有耐心的助教。这份手册给你一套可以反复用的五遍读法，和一套直接复制就能用的 Prompt 模板。</span>
+        <span class="en">AI won't read a paper for you, but it can be the most patient teaching assistant you have. This manual gives you a repeatable five-pass method and a set of prompts you can copy and use directly.</span>
+      </p>
+      <div class="hero-meta">
+        <span class="chip"><span class="zh">五遍读法</span><span class="en">Five-pass method</span></span>
+        <span class="chip"><span class="zh">14 个可复制模板</span><span class="en">14 copyable prompts</span></span>
+        <span class="chip"><span class="zh">6 个常见的坑</span><span class="en">6 common traps</span></span>
+        <span class="chip"><span class="zh">术语速查</span><span class="en">Glossary</span></span>
+      </div>
+    </div>
+
+    <!-- ============ 01 先立规矩 ============ -->
+    <section id="rules">
+      <div class="sec-head">
+        <span class="sec-num">01</span>
+        <h2><span class="zh">先立规矩：AI 能做什么，不能做什么</span><span class="en">Ground rules: what AI can and cannot do</span></h2>
+        <p class="sub">
+          <span class="zh">把边界划清楚，后面所有用法才有意义。用错了工具不可怕，把 AI 的输出当成自己的判断才可怕。</span>
+          <span class="en">Draw the boundary first — everything else depends on it. Misusing a tool is survivable; mistaking its output for your own judgement is not.</span>
+        </p>
+      </div>
+
+      <div class="split">
+        <div class="panel cando yes">
+          <span class="tag"><span class="dot"></span><span class="zh">AI 擅长</span><span class="en">AI is good at</span></span>
+          <ul>
+            <li><span class="zh"><strong>翻译与术语解释</strong>：把方法部分的生僻表述翻译成人话，把专业名词拆开讲。</span><span class="en"><strong>Translation and jargon</strong>: turning dense method prose into plain language, unpacking technical terms.</span></li>
+            <li><span class="zh"><strong>拆解论证结构</strong>：这篇论文主张什么、靠哪几条证据、证据之间怎么连起来。</span><span class="en"><strong>Mapping the argument</strong>: what the paper claims, on what evidence, and how the evidence links together.</span></li>
+            <li><span class="zh"><strong>解释统计量</strong>：d、η²、r、贝叶斯因子的含义，以及怎么读置信区间。</span><span class="en"><strong>Explaining statistics</strong>: what d, η², r, and Bayes factors mean, and how to read a confidence interval.</span></li>
+            <li><span class="zh"><strong>扮演审稿人</strong>：找出逻辑跳跃、替代解释、样本局限。</span><span class="en"><strong>Playing reviewer</strong>: surfacing logical leaps, alternative explanations, sample limitations.</span></li>
+            <li><span class="zh"><strong>生成自测题</strong>：用提问逼你确认自己是不是真懂了。</span><span class="en"><strong>Making self-quizzes</strong>: questions that force you to check whether you actually understood.</span></li>
+          </ul>
+        </div>
+
+        <div class="panel cando no">
+          <span class="tag"><span class="dot"></span><span class="zh">AI 不擅长</span><span class="en">AI is bad at</span></span>
+          <ul>
+            <li><span class="zh"><strong>判断论文可不可信</strong>：它没有你的数据，也没有审稿人的完整背景。</span><span class="en"><strong>Judging credibility</strong>: it doesn't have the data, or the reviewer's full context.</span></li>
+            <li><span class="zh"><strong>给你真实引用</strong>：它编出来的参考文献格式完美、作者真实、但文章不存在。</span><span class="en"><strong>Giving real citations</strong>: fabricated references look perfect — right format, real authors, non-existent paper.</span></li>
+            <li><span class="zh"><strong>读你没给它的内容</strong>：你不贴进去的部分，它只能靠猜，而且猜得很自信。</span><span class="en"><strong>Reading what you didn't give it</strong>: for anything you don't paste in, it guesses — confidently.</span></li>
+            <li><span class="zh"><strong>替你做学术判断</strong>：这篇论文值不值得信，最终是你的结论，不是它的。</span><span class="en"><strong>Making the scholarly call</strong>: whether the paper holds up is your conclusion, not its.</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="redline">
+        <span class="tag"><span class="dot"></span><span class="zh">学术诚信红线</span><span class="en">Academic integrity — hard lines</span></span>
+        <ul>
+          <li><span class="zh"><strong>不提交 AI 的理解当作自己的理解。</strong>用 AI 帮你读懂，然后合上电脑，用自己的话写出来。</span><span class="en"><strong>Never submit AI's understanding as your own.</strong> Use it to help you understand, then close it and write in your own words.</span></li>
+          <li><span class="zh"><strong>不引用你没亲眼核实的文献。</strong>AI 给的每一条参考文献，都要去数据库里查一遍再决定要不要用。</span><span class="en"><strong>Never cite a reference you haven't verified.</strong> Look up every one AI gives you in a database before you use it.</span></li>
+          <li><span class="zh"><strong>不上传未发表数据、被试个人信息、导师的未公开稿件。</strong>这些内容一旦上传就离开了你的控制。</span><span class="en"><strong>Never upload unpublished data, participant information, or an advisor's draft.</strong> Once uploaded, it has left your control.</span></li>
+          <li><span class="zh"><strong>课程或导师有明确规定的，以规定为准。</strong>这份手册给的是通用做法，不能覆盖你所在课程的具体要求。</span><span class="en"><strong>Course or advisor rules win.</strong> This manual gives general practice; it does not override your course's specific policy.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ 02 为什么难读 ============ -->
+    <section id="why">
+      <div class="sec-head">
+        <span class="sec-num">02</span>
+        <h2><span class="zh">为什么心理学论文难读</span><span class="en">Why psychology papers are hard to read</span></h2>
+        <p class="sub">
+          <span class="zh">不是你的问题。论文这种文体本来就不是为「读懂」写的，它是为「压缩」写的。</span>
+          <span class="en">It isn't you. The paper format was never designed to be understood — it was designed to compress.</span>
+        </p>
+      </div>
+
+      <p>
+        <span class="zh">一篇心理学论文要在一万词里塞进一个研究从想法到结论的全部过程。作者知道审稿人只关心细节，所以方法部分写得密不透风；作者知道篇幅有限，所以每一步推理都省略了中间环节。读者拿到的是一个<strong>压缩包</strong>，不是一份讲解。</span>
+        <span class="en">A psychology paper compresses an entire study — from idea to conclusion — into about ten thousand words. Authors know reviewers only care about details, so the method section is written densely; they know space is limited, so every inferential step is elided. What you receive is an <strong>archive</strong>, not a tutorial.</span>
+      </p>
+
+      <div class="split">
+        <div class="panel">
+          <h3><span class="zh">门槛一 · 结构</span><span class="en">Barrier 1 · Structure</span></h3>
+          <p style="font-size:.91rem;color:var(--ink-2)">
+            <span class="zh">IMRaD 只是个外壳。真正难的是：方法部分一个段落可能包含被试、设计、操纵、测量、分析五个层次的信息，而作者不会给你分段提示。</span>
+            <span class="en">IMRaD is only a shell. The hard part: a single method paragraph can carry five layers — participants, design, manipulation, measures, analysis — with no signposting.</span>
+          </p>
+        </div>
+        <div class="panel">
+          <h3><span class="zh">门槛二 · 统计</span><span class="en">Barrier 2 · Statistics</span></h3>
+          <p style="font-size:.91rem;color:var(--ink-2)">
+            <span class="zh">结果部分假设你不查表就知道 <code>F(2, 87) = 4.31, p = .017, η²p = .090</code> 是什么意思。不查表就不知道，这不是你的错。</span>
+            <span class="en">The results section assumes you can read <code>F(2, 87) = 4.31, p = .017, η²p = .090</code> without looking it up. If you can't, that's not a personal failing.</span>
+          </p>
+        </div>
+        <div class="panel">
+          <h3><span class="zh">门槛三 · 术语</span><span class="en">Barrier 3 · Vocabulary</span></h3>
+          <p style="font-size:.91rem;color:var(--ink-2)">
+            <span class="zh">每个子领域都有一套自己的构念名。工作记忆的「精度」和临床的「自知力」都不是日常汉语里的意思，字面理解必然跑偏。</span>
+            <span class="en">Every subfield has its own construct names. "Precision" in working memory and "insight" in clinical work don't mean what everyday language suggests.</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="panel tint">
+        <h3><span class="zh">关键认知</span><span class="en">The key realisation</span></h3>
+        <p style="font-size:.93rem">
+          <span class="zh">论文不是散文，不能从头读到尾。<strong>它是一条「主张 → 证据 → 推理」的链条。</strong>读论文的任务不是把每个字看完，而是把这条链还原出来，然后检查每一环是否结实。AI 最擅长帮你做的，正是「还原链条」这一步——而「检查每一环」必须你自己来。</span>
+          <span class="en">A paper is not an essay to read linearly. <strong>It is a chain of claim → evidence → inference.</strong> Your job is not to finish every word; it is to reconstruct that chain and test each link. Reconstructing is exactly what AI does well — testing the links is yours alone.</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ 03 准备工作 ============ -->
+    <section id="prep">
+      <div class="sec-head">
+        <span class="sec-num">03</span>
+        <h2><span class="zh">准备工作：喂什么、怎么问</span><span class="en">Setup: what to feed it, how to ask</span></h2>
+        <p class="sub">
+          <span class="zh">同样的模型，问法不同，得到的东西差得很远。这一步做对了，后面五遍读法才转得起来。</span>
+          <span class="en">The same model gives wildly different answers depending on how you ask. Get this right and the five passes actually work.</span>
+        </p>
+      </div>
+
+      <div class="split">
+        <div class="panel">
+          <h3><span class="zh">喂什么</span><span class="en">What to feed it</span></h3>
+          <ul style="font-size:.92rem">
+            <li><span class="zh"><strong>只喂你手上真的有的。</strong>把 PDF 的正文贴进去，或者用支持上传文件的工具直接传。别让它「回忆」这篇论文。</span><span class="en"><strong>Only what you actually have.</strong> Paste the PDF text, or upload the file if the tool supports it. Never let it "recall" the paper.</span></li>
+            <li><span class="zh"><strong>分块喂，不要一次全塞。</strong>先摘要 + 引言，再方法，再结果。一次喂太多，它会把不同部分的细节混在一起。</span><span class="en"><strong>Feed it in blocks.</strong> Abstract + intro, then method, then results. Everything at once and it blends details across sections.</span></li>
+            <li><span class="zh"><strong>图表要单独处理。</strong>图里的信息 AI 读不到（除非它能看图，那也要你自己确认读对了）。图注文字记得一起贴。</span><span class="en"><strong>Handle figures separately.</strong> Text-only models can't see figures. Even multimodal ones need you to verify. Always paste the figure caption.</span></li>
+            <li><span class="zh"><strong>保留原文。</strong>让它引用时标出原句，方便你回原文核对。</span><span class="en"><strong>Keep the original.</strong> Ask it to quote the source sentence so you can check back against the paper.</span></li>
+          </ul>
+        </div>
+
+        <div class="panel">
+          <h3><span class="zh">怎么问：四要素</span><span class="en">How to ask: four elements</span></h3>
+          <ul style="font-size:.92rem">
+            <li><span class="zh"><strong>角色</strong>——「你是一位心理学方法学审稿人」。角色决定了它调用的知识。</span><span class="en"><strong>Role</strong> — "You are a methodology reviewer in psychology." The role selects the knowledge it draws on.</span></li>
+            <li><span class="zh"><strong>任务</strong>——一个动词开头的明确要求。「找出」比「谈谈」有用得多。</span><span class="en"><strong>Task</strong> — one clear verb. "Identify" is far more useful than "discuss".</span></li>
+            <li><span class="zh"><strong>约束</strong>——「只依据我提供的文本」「不确定就说不确定」。这条最重要，它直接压制幻觉。</span><span class="en"><strong>Constraint</strong> — "Use only the text I provided", "say so if you're unsure." This one matters most; it directly suppresses fabrication.</span></li>
+            <li><span class="zh"><strong>格式</strong>——「用表格」「不超过三条」「每条附原文」。格式约束会让输出变得可核对。</span><span class="en"><strong>Format</strong> — "as a table", "no more than three", "quote the source". Format constraints make output checkable.</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="panel tint">
+        <h3><span class="zh">一句万能的收尾</span><span class="en">A universal closer</span></h3>
+        <p style="font-size:.93rem">
+          <span class="zh">在每个 Prompt 末尾加上这句，能挡掉大部分幻觉：</span>
+          <span class="en">Append this to any prompt to head off most fabrication:</span>
+        </p>
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P0</span>
+            <span class="ttl"><span class="zh">防幻觉收尾句</span><span class="en">Anti-fabrication closer</span></span>
+            <button class="copy" type="button" data-copy="p0"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p0">只依据我提供的文本回答。凡是我提供的文本里没有明确写到的内容，一律标注「原文未提及」，不要补充你从别处知道的信息，也不要推测作者的意图。如果你不确定，直接说「不确定」。</pre>
+          <div class="note"><span class="zh">贴中文论文或英文论文都适用。</span><span class="en">Works whether the paper is in Chinese or English.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 04 五遍读法 ============ -->
+    <section id="five">
+      <div class="sec-head">
+        <span class="sec-num">04</span>
+        <h2><span class="zh">五遍读法</span><span class="en">The five-pass method</span></h2>
+        <p class="sub">
+          <span class="zh">五遍不是「读五次」。每一遍带着不同的问题、产出不同的东西。顺序不能换——后一遍依赖前一遍的产出。</span>
+          <span class="en">Five passes is not "reading it five times." Each pass asks different questions and produces a different artifact. The order matters — each pass builds on the last.</span>
+        </p>
+      </div>
+
+      <figure style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="overflow-x:auto">
+        <svg viewBox="0 0 720 176" role="img" style="min-width:620px;width:100%;height:auto;max-width:100%"
+             aria-label="五遍读法流程图：建地图 → 啃方法 → 读结果 → 当审稿人 → 费曼检验，前四遍向内收紧，第五遍向外输出。">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <polygon points="0,1 10,5 0,9" fill="currentColor"/>
+            </marker>
+          </defs>
+          <text x="0" y="14" font-size="11" font-family="'IBM Plex Mono',monospace" font-weight="600"
+                letter-spacing="1.4" fill="currentColor" opacity="0.55">READING PASSES / 读法顺序</text>
+
+          <!-- 五个阶段 -->
+          <g font-family="'IBM Plex Mono',monospace">
+            <!-- 1 -->
+            <rect x="0" y="40" width="126" height="62" rx="8" fill="var(--block)" stroke="currentColor" stroke-opacity="0.22"/>
+            <text x="14" y="62" font-size="10" font-weight="600" fill="currentColor" opacity="0.5">01</text>
+            <text x="14" y="80" font-size="13" font-weight="600" fill="currentColor">建地图</text>
+            <text x="14" y="94" font-size="9.5" fill="currentColor" opacity="0.62">摘要 · 图表 · 结论</text>
+            <!-- 2 -->
+            <rect x="148" y="40" width="126" height="62" rx="8" fill="var(--block)" stroke="currentColor" stroke-opacity="0.22"/>
+            <text x="162" y="62" font-size="10" font-weight="600" fill="currentColor" opacity="0.5">02</text>
+            <text x="162" y="80" font-size="13" font-weight="600" fill="currentColor">啃方法</text>
+            <text x="162" y="94" font-size="9.5" fill="currentColor" opacity="0.62">被试 · 设计 · 分析</text>
+            <!-- 3 -->
+            <rect x="296" y="40" width="126" height="62" rx="8" fill="var(--block)" stroke="currentColor" stroke-opacity="0.22"/>
+            <text x="310" y="62" font-size="10" font-weight="600" fill="currentColor" opacity="0.5">03</text>
+            <text x="310" y="80" font-size="13" font-weight="600" fill="currentColor">读结果</text>
+            <text x="310" y="94" font-size="9.5" fill="currentColor" opacity="0.62">统计量 · 效应量</text>
+            <!-- 4 -->
+            <rect x="444" y="40" width="126" height="62" rx="8" fill="var(--block)" stroke="currentColor" stroke-opacity="0.22"/>
+            <text x="458" y="62" font-size="10" font-weight="600" fill="currentColor" opacity="0.5">04</text>
+            <text x="458" y="80" font-size="13" font-weight="600" fill="currentColor">当审稿人</text>
+            <text x="458" y="94" font-size="9.5" fill="currentColor" opacity="0.62">局限 · 替代解释</text>
+            <!-- 5 -->
+            <rect x="592" y="40" width="126" height="62" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"/>
+            <text x="606" y="62" font-size="10" font-weight="600" fill="var(--accent-text)">05</text>
+            <text x="606" y="80" font-size="13" font-weight="600" fill="var(--accent-text)">费曼检验</text>
+            <text x="606" y="94" font-size="9.5" fill="var(--accent-text)" opacity="0.8">讲出来 · 找漏洞</text>
+
+            <!-- 箭头 -->
+            <g stroke="currentColor" stroke-opacity="0.4" stroke-width="1.2" marker-end="url(#ah)">
+              <line x1="128" y1="71" x2="144" y2="71"/>
+              <line x1="276" y1="71" x2="292" y2="71"/>
+              <line x1="424" y1="71" x2="440" y2="71"/>
+              <line x1="572" y1="71" x2="588" y2="71"/>
+            </g>
+          </g>
+
+          <!-- 收敛 / 发散提示 -->
+          <path d="M4 122 L718 122" stroke="currentColor" stroke-opacity="0.18" stroke-width="1" stroke-dasharray="3 4"/>
+          <text x="0" y="146" font-size="10" fill="currentColor" opacity="0.55" font-family="'IBM Plex Mono',monospace">01–04：向内收敛，把论文拆开，还原证据链</text>
+          <text x="718" y="146" font-size="10" text-anchor="end" fill="var(--accent-text)" font-family="'IBM Plex Mono',monospace">05：向外发散，用输出检验输入</text>
+          <text x="0" y="166" font-size="10.5" fill="currentColor" opacity="0.7" font-family="'IBM Plex Mono',monospace">每一遍都产出一样东西：一句话总结 → 变量表 → 假设-结果对照表 → 批判清单 → 一段讲解</text>
+        </svg>
+        </div>
+        <figcaption style="font-size:.83rem;color:var(--ink-3)">
+          <span class="zh">五遍读法的顺序与各自的产出。前四遍是拆解，第五遍是检验——只有能讲出来，才算真读懂了。</span>
+          <span class="en">The five passes and what each produces. The first four take the paper apart; the fifth tests whether it went back together.</span>
+        </figcaption>
+      </figure>
+
+      <div class="passes">
+        <!-- 第一遍 -->
+        <article class="pass">
+          <div class="idx">01</div>
+          <div class="body">
+            <div class="head">
+              <h3><span class="zh">建地图</span><span class="en">Build the map</span></h3>
+              <span class="time"><span class="zh">约 10 分钟</span><span class="en">~10 min</span></span>
+            </div>
+            <p style="font-size:.93rem;color:var(--ink-2)">
+              <span class="zh">先不读正文。读标题、摘要、所有图表、结论的第一段。目标是回答一个问题：<strong>这篇论文在回答什么，答案是什么。</strong>此时你不需要懂细节，只需要知道地形。</span>
+              <span class="en">Skip the body. Read the title, abstract, every figure and table, and the first paragraph of the discussion. Goal: answer one question — <strong>what is this paper asking, and what does it answer?</strong> You don't need details yet, only the terrain.</span>
+            </p>
+            <div class="ask">
+              <span class="k"><span class="zh">对着 AI 问</span><span class="en">Ask AI</span></span>
+              <span><span class="zh">这篇论文的研究问题是什么？主要主张是什么？作者自己认为最重要的发现是哪一个？</span><span class="en">What is the research question? What is the main claim? Which finding do the authors treat as most important?</span></span>
+            </div>
+            <div class="out">
+              <span class="k"><span class="zh">产出</span><span class="en">Output</span></span>
+              <span><span class="zh">一句话总结——「这篇论文证明了 X 在 Y 条件下会导致 Z」。</span><span class="en">One sentence — "this paper shows X under condition Y produces Z."</span></span>
+            </div>
+          </div>
+        </article>
+
+        <!-- 第二遍 -->
+        <article class="pass">
+          <div class="idx">02</div>
+          <div class="body">
+            <div class="head">
+              <h3><span class="zh">啃方法</span><span class="en">Dig into the method</span></h3>
+              <span class="time"><span class="zh">约 30 分钟</span><span class="en">~30 min</span></span>
+            </div>
+            <p style="font-size:.93rem;color:var(--ink-2)">
+              <span class="zh">这是最费劲也最值钱的一遍。把方法部分拆成五层：<strong>被试是谁、什么设计、怎么操纵、怎么测量、怎么分析。</strong>然后问自己一个致命问题：这个设计真的能支持作者想下的结论吗？</span>
+              <span class="en">The hardest and most valuable pass. Break the method into five layers: <strong>who the participants were, what design, what manipulation, what measures, what analysis.</strong> Then ask the killer question: can this design actually support the conclusion the authors want?</span>
+            </p>
+            <div class="ask">
+              <span class="k"><span class="zh">对着 AI 问</span><span class="en">Ask AI</span></span>
+              <span><span class="zh">请把方法部分拆成被试、设计、操纵、测量、分析五块。这是被试间还是被试内设计？自变量和因变量分别是什么？有没有明显没控制住的混淆变量？</span><span class="en">Break the method into participants, design, manipulation, measures, and analysis. Is this between- or within-subjects? What are the IV and DV? Are there obvious uncontrolled confounds?</span></span>
+            </div>
+            <div class="out">
+              <span class="k"><span class="zh">产出</span><span class="en">Output</span></span>
+              <span><span class="zh">一张变量表：自变量 / 因变量 / 控制变量 / 样本量 / 设计类型。</span><span class="en">A variable table: IV / DV / controlled variables / N / design type.</span></span>
+            </div>
+          </div>
+        </article>
+
+        <!-- 第三遍 -->
+        <article class="pass">
+          <div class="idx">03</div>
+          <div class="body">
+            <div class="head">
+              <h3><span class="zh">读结果</span><span class="en">Read the results</span></h3>
+              <span class="time"><span class="zh">约 30 分钟</span><span class="en">~30 min</span></span>
+            </div>
+            <p style="font-size:.93rem;color:var(--ink-2)">
+              <span class="zh">结果部分最容易被「读过去」——每个数字都认识，但不知道哪个数字对应哪个假设。做法是<strong>把每个统计量绑回它检验的假设</strong>，并单独看清楚效应量，而不是只看 p 值。</span>
+              <span class="en">The results section is the easiest to skim — every number is familiar, but you lose track of which number tests which hypothesis. The fix: <strong>bind each statistic back to the hypothesis it tests</strong>, and read the effect size on its own rather than only the p value.</span>
+            </p>
+            <div class="ask">
+              <span class="k"><span class="zh">对着 AI 问</span><span class="en">Ask AI</span></span>
+              <span><span class="zh">请把每个统计结果对应到它检验的假设上，做成表格。另外单独说明：这个效应量（d / η² / r）按心理学的一般标准算大还是小？它的置信区间跨过 0 了吗？</span><span class="en">Map each statistical result to the hypothesis it tests, as a table. Separately: by conventional standards in psychology, is this effect size (d / η² / r) large or small? Does its confidence interval cross zero?</span></span>
+            </div>
+            <div class="out">
+              <span class="k"><span class="zh">产出</span><span class="en">Output</span></span>
+              <span><span class="zh">假设-结果对照表，以及哪些假设<em>没有</em>得到支持。</span><span class="en">A hypothesis-to-result table, including which hypotheses were <em>not</em> supported.</span></span>
+            </div>
+          </div>
+        </article>
+
+        <!-- 第四遍 -->
+        <article class="pass">
+          <div class="idx">04</div>
+          <div class="body">
+            <div class="head">
+              <h3><span class="zh">当审稿人</span><span class="en">Become the reviewer</span></h3>
+              <span class="time"><span class="zh">约 20 分钟</span><span class="en">~20 min</span></span>
+            </div>
+            <p style="font-size:.93rem;color:var(--ink-2)">
+              <span class="zh">现在换立场。你不再是学生，是审稿人。<strong>你的任务不是找优点，是找这个研究最脆弱的地方。</strong>注意：作者的「局限」段落是他们愿意承认的，真正的弱点往往不在那里。</span>
+              <span class="en">Switch positions. You are no longer a student; you are the reviewer. <strong>Your job is not to find strengths but the study's most fragile point.</strong> Note: the "limitations" paragraph lists what the authors are willing to admit — the real weaknesses are often elsewhere.</span>
+            </p>
+            <div class="ask">
+              <span class="k"><span class="zh">对着 AI 问</span><span class="en">Ask AI</span></span>
+              <span><span class="zh">你是一位严格的心理学方法学审稿人。请指出这项研究最容易被质疑的三个地方，并说明每一个会如何影响结论。不要重复作者在局限段落里已经承认的内容。</span><span class="en">You are a strict methodology reviewer in psychology. Identify the three most attackable aspects of this study and how each would affect the conclusion. Do not repeat what the authors already conceded in their limitations paragraph.</span></span>
+            </div>
+            <div class="out">
+              <span class="k"><span class="zh">产出</span><span class="en">Output</span></span>
+              <span><span class="zh">一张批判清单：每条弱点 + 它对结论的威胁程度（致命 / 需补数据 / 可讨论）。</span><span class="en">A critique list: each weakness plus how much it threatens the conclusion (fatal / needs more data / debatable).</span></span>
+            </div>
+          </div>
+        </article>
+
+        <!-- 第五遍 -->
+        <article class="pass">
+          <div class="idx">05</div>
+          <div class="body">
+            <div class="head">
+              <h3><span class="zh">费曼检验</span><span class="en">The Feynman test</span></h3>
+              <span class="time"><span class="zh">约 15 分钟</span><span class="en">~15 min</span></span>
+            </div>
+            <p style="font-size:.93rem;color:var(--ink-2)">
+              <span class="zh">合上论文，讲给一个完全不懂心理学的人听。讲不顺的地方，就是你还没懂的地方。<strong>然后让 AI 挑你的错——这一步是把 AI 从「讲解者」变成「考官」，用法的性质完全不同。</strong></span>
+              <span class="en">Close the paper and explain it to someone with no psychology background. Wherever you stumble is where you don't yet understand. <strong>Then have AI find your errors — this turns it from lecturer into examiner, a completely different use.</strong></span>
+            </p>
+            <div class="ask">
+              <span class="k"><span class="zh">对着 AI 说</span><span class="en">Say to AI</span></span>
+              <span><span class="zh">下面是我对这篇论文的理解，请你当考官：指出我说错的地方、说得含糊的地方、以及我漏掉的重要内容。不要客气。</span><span class="en">Here is my understanding of the paper. Act as an examiner: point out what I got wrong, what I stated vaguely, and what I omitted. Don't be polite about it.</span></span>
+            </div>
+            <div class="out">
+              <span class="k"><span class="zh">产出</span><span class="en">Output</span></span>
+              <span><span class="zh">一段你能不看稿讲出来的讲解。讲得出来，才是真的读懂了。</span><span class="en">An explanation you can give without notes. If you can deliver it, you actually understood it.</span></span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============ 05 Prompt 模板库 ============ -->
+    <section id="prompts">
+      <div class="sec-head">
+        <span class="sec-num">05</span>
+        <h2><span class="zh">Prompt 模板库</span><span class="en">Prompt library</span></h2>
+        <p class="sub">
+          <span class="zh">按五遍读法分组。每个都可以直接复制，把方括号里的内容换成你自己的。用之前记得先贴论文原文。</span>
+          <span class="en">Grouped by pass. Copy any of them directly and replace the bracketed parts. Paste the paper text first.</span>
+        </p>
+      </div>
+
+      <!-- 第一组 -->
+      <div class="tpl-group">
+        <span class="glabel"><span class="zh">第一遍 · 建地图</span><span class="en">Pass 1 · Build the map</span></span>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P1</span>
+            <span class="ttl"><span class="zh">一句话总结</span><span class="en">One-sentence summary</span></span>
+            <button class="copy" type="button" data-copy="p1"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p1">下面是一篇心理学论文的摘要和结论部分。请只依据这些文本回答：
+
+1. 这篇论文要回答的研究问题是什么？（一句话）
+2. 作者的主要主张是什么？（一句话）
+3. 作者自己认为最重要的那个发现是哪一个？
+4. 用一句话总结整篇论文：「这篇论文证明了 ______ 在 ______ 条件下会导致 ______」
+
+如果某一条在文本里找不到明确依据，写「原文未提及」，不要推测。</pre>
+          <div class="note"><span class="zh">产出的是你后面四遍都要对照的那句话，写不准就重来。</span><span class="en">This sentence anchors the next four passes. If it's off, redo it.</span></div>
+        </div>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P2</span>
+            <span class="ttl"><span class="zh">术语扫盲</span><span class="en">Jargon decoder</span></span>
+            <button class="copy" type="button" data-copy="p2"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p2">下面是一篇心理学论文的引言部分。请找出其中所有的专业术语和构念名称（例如工作记忆、执行控制、构念效度等），做成表格，三列：
+
+术语 | 在这个研究里的具体含义 | 一个日常生活的类比
+
+要求：
+- 「具体含义」必须依据我提供的文本，不要用教科书上的一般定义
+- 如果一个术语在文本里没有被明确定义，第三列写「文本未定义」
+- 类比要贴切，不要为了凑而硬编</pre>
+          <div class="note"><span class="zh">第三列是关键——讲不出类比，通常说明它自己也只记住了字面。</span><span class="en">The third column matters: if it can't produce an analogy, it likely only memorised the label.</span></div>
+        </div>
+      </div>
+
+      <!-- 第二组 -->
+      <div class="tpl-group">
+        <span class="glabel"><span class="zh">第二遍 · 啃方法</span><span class="en">Pass 2 · Dig into the method</span></span>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P3</span>
+            <span class="ttl"><span class="zh">方法五层拆解</span><span class="en">Five-layer method breakdown</span></span>
+            <button class="copy" type="button" data-copy="p3"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p3">下面是一篇心理学论文的方法部分。请把它拆成五块，每块只写文本里明确写了的内容：
+
+1. 被试：样本量、来源、年龄范围、排除标准
+2. 设计：被试间还是被试内？有几个自变量？每个自变量几个水平？
+3. 操纵：研究者实际做了什么让被试进入不同条件？
+4. 测量：因变量怎么测的？测了几次？信度指标是多少？
+5. 分析：用了什么统计方法？有没有做多重比较校正？
+
+最后请单独回答：这是一个能支持因果结论的设计吗？为什么？
+
+文本里没写到的，标注「原文未提及」。</pre>
+          <div class="note"><span class="zh">最后那个因果问题，是这一遍真正要拿到的东西。</span><span class="en">That last causal question is the real prize of this pass.</span></div>
+        </div>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P4</span>
+            <span class="ttl"><span class="zh">混淆变量排查</span><span class="en">Confound audit</span></span>
+            <button class="copy" type="button" data-copy="p4"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p4">下面是一篇心理学论文的方法部分。请完成两件事：
+
+一、列出研究者主动控制了的变量（随机分配、平衡、纳入统计模型等），并说明各自是怎么控制的。
+
+二、列出研究者没有控制、但可能影响结果的变量。每条请说明：
+- 它会通过什么路径影响因变量
+- 它更可能让结果被高估还是低估
+- 作者是否在正文任何地方提到过它
+
+第二部分请按「威胁程度」从高到低排列。如果某个变量其实已经被控制了，不要重复列出。</pre>
+          <div class="note"><span class="zh">第二部分才是重点。被控制的变量作者一定会写，没控制的才需要你找。</span><span class="en">Part two is the point. Authors always report what they controlled; the uncontrolled ones are yours to find.</span></div>
+        </div>
+      </div>
+
+      <!-- 第三组 -->
+      <div class="tpl-group">
+        <span class="glabel"><span class="zh">第三遍 · 读结果</span><span class="en">Pass 3 · Read the results</span></span>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P5</span>
+            <span class="ttl"><span class="zh">假设-结果对照表</span><span class="en">Hypothesis-to-result table</span></span>
+            <button class="copy" type="button" data-copy="p5"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p5">下面是一篇心理学论文的结果部分。请做一张对照表，四列：
+
+假设（原始表述） | 检验它的统计量（含 df、p 值） | 效应量及其置信区间 | 结论（支持 / 不支持 / 部分支持）
+
+要求：
+- 一行一个假设，不要合并
+- 如果某个假设论文里根本没检验，单独列在表格下面并注明
+- 效应量那一列，请原样引用论文报告的数字，不要重新计算
+- 最后告诉我：哪些假设没有得到支持？</pre>
+          <div class="note"><span class="zh">「哪些没得到支持」经常被读者自动跳过，但它往往是最有信息量的部分。</span><span class="en">The unsupported hypotheses are the ones readers skip — and often the most informative.</span></div>
+        </div>
+
+        <div class="tpl warn-edge">
+          <div class="tpl-head">
+            <span class="id">P6</span>
+            <span class="ttl"><span class="zh">效应量解读（防误读）</span><span class="en">Effect size, read honestly</span></span>
+            <button class="copy" type="button" data-copy="p6"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p6">下面是一篇心理学论文的结果部分。请针对其中每一个主要效应，回答：
+
+1. 论文报告的效应量是哪一个指标？（Cohen's d / η² / η²p / r / OR 等）
+2. 这个数字按心理学领域的常规标准，属于小、中还是大？请说明你用的是哪套标准。
+3. 它的置信区间是多少？跨过 0 了吗？区间有多宽？
+4. 如果这个效应的真实值落在置信区间的最下端，实际意义还站得住吗？
+
+请特别注意：不要因为 p 值小就说效应大。p 值和效应量是两件不同的事，请在回答里明确区分。
+
+如果论文没有报告效应量，直接说「论文未报告」。</pre>
+          <div class="note"><span class="zh">「p 小 = 效应大」是最常见的误读，这个模板专门用来卡住它。</span><span class="en">"Small p means big effect" is the most common misreading; this prompt is built to block it.</span></div>
+        </div>
+      </div>
+
+      <!-- 第四组 -->
+      <div class="tpl-group">
+        <span class="glabel"><span class="zh">第四遍 · 当审稿人</span><span class="en">Pass 4 · Become the reviewer</span></span>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P7</span>
+            <span class="ttl"><span class="zh">扮演严格审稿人</span><span class="en">Play the strict reviewer</span></span>
+            <button class="copy" type="button" data-copy="p7"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p7">你是一位以严格著称的心理学方法学审稿人。下面是一篇论文的全文。
+
+请给出三条最主要的批评意见，按严重程度排序。每条包含：
+- 问题是什么（具体到方法或推理的哪一步）
+- 它如何削弱论文的核心结论
+- 如果要补救，作者需要补做什么
+
+三条要求：
+1. 不要重复作者在「局限」段落里已经承认的内容
+2. 不要提「样本量可以更大」「可以多做几个实验」这类适用于任何论文的空话
+3. 每条批评都要指向这篇论文特有的某个具体设计或推理环节
+
+如果你认为某条结论其实站得住，也请明确说出来。</pre>
+          <div class="note"><span class="zh">第 2 条约束最关键，不加这条，AI 一定会给你三条万能废话。</span><span class="en">Constraint 2 matters most — without it you get three generic platitudes.</span></div>
+        </div>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P8</span>
+            <span class="ttl"><span class="zh">替代解释</span><span class="en">Alternative explanations</span></span>
+            <button class="copy" type="button" data-copy="p8"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p8">下面是一篇心理学论文。作者用他们的结果支持了某个解释。请：
+
+1. 用一句话说清作者的核心解释是什么
+2. 提出两个同样能解释这些数据的替代解释
+3. 对每个替代解释说明：现有数据能不能区分它和作者的解释？如果能，是靠哪个分析区分的？如果不能，需要什么样的实验才能区分？
+
+第 2 条请特别注意那些「不是理论问题而是方法问题」的替代解释，例如需求特征、练习效应、天花板/地板效应、回归到均值。</pre>
+          <div class="note"><span class="zh">最后一个提示很实用——方法层面的替代解释比理论层面的更容易被忽略。</span><span class="en">That last hint is the useful one: methodological alternatives get overlooked far more than theoretical ones.</span></div>
+        </div>
+      </div>
+
+      <!-- 第五组 -->
+      <div class="tpl-group">
+        <span class="glabel"><span class="zh">第五遍 · 费曼检验</span><span class="en">Pass 5 · The Feynman test</span></span>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P9</span>
+            <span class="ttl"><span class="zh">让 AI 当考官</span><span class="en">Let AI examine you</span></span>
+            <button class="copy" type="button" data-copy="p9"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p9">下面是一篇心理学论文，以及我对它的理解。请你当考官，严格检查我的理解：
+
+【论文原文】
+（在此粘贴）
+
+【我的理解】
+（在此粘贴你自己写的总结，不要用 AI 生成的内容）
+
+请给出：
+1. 我理解错的地方（明确指出错在哪，并引用原文对应之处）
+2. 我说得含糊、经不起追问的地方
+3. 我完全漏掉的重要内容
+4. 一个我如果能答上来就说明我真懂了的问题
+
+请直接指出问题，不需要先肯定我。</pre>
+          <div class="note"><span class="zh">「我的理解」必须是你自己写的。用 AI 的输出喂回给 AI，这一步就白做了。</span><span class="en">The "my understanding" block must be yours. Feeding AI output back to AI makes this pass worthless.</span></div>
+        </div>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P10</span>
+            <span class="ttl"><span class="zh">自测题生成</span><span class="en">Generate a self-quiz</span></span>
+            <button class="copy" type="button" data-copy="p10"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p10">下面是一篇心理学论文。请出 8 道检验「是否真读懂」的题目，不要考记忆细节（例如「被试有多少人」），要考理解：
+
+- 3 道：要求解释某个设计选择为什么必要
+- 2 道：要求判断某个结论能否从数据推出
+- 2 道：要求指出论文的某个弱点
+- 1 道：要求把论文的核心发现讲给一个外行听
+
+每题附答案要点（不超过三句）。题目要具体到这篇论文，换一篇论文就不能用了。</pre>
+          <div class="note"><span class="zh">最后那句约束是质量开关——不加它，出来的题抄哪篇论文都一样。</span><span class="en">That final constraint is the quality switch — without it the questions fit any paper.</span></div>
+        </div>
+      </div>
+
+      <!-- 通用组 -->
+      <div class="tpl-group">
+        <span class="glabel"><span class="zh">通用 · 随时可用</span><span class="en">General · any time</span></span>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P11</span>
+            <span class="ttl"><span class="zh">翻译但不简化</span><span class="en">Translate without simplifying</span></span>
+            <button class="copy" type="button" data-copy="p11"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p11">请把下面这段心理学论文的方法部分翻译成中文。要求：
+
+1. 保持学术准确性，专业术语用心理学界通用的中文译名，并在第一次出现时用括号附上英文原词
+2. 不要简化、不要省略、不要「意译成通俗说法」——我要的是能对照原文的翻译
+3. 长句可以按中文习惯拆分，但不要丢掉任何一个限定条件
+4. 如果某个术语没有公认的中文译名，保留英文并注明
+
+【原文】
+（在此粘贴）</pre>
+          <div class="note"><span class="zh">和「讲讲这段什么意思」完全不同——这个要的是可核对的译文，不是讲解。</span><span class="en">Different from "explain this to me" — this asks for a checkable translation, not a gloss.</span></div>
+        </div>
+
+        <div class="tpl warn-edge">
+          <div class="tpl-head">
+            <span class="id">P12</span>
+            <span class="ttl"><span class="zh">核实引用（关键）</span><span class="en">Verify a citation (critical)</span></span>
+            <button class="copy" type="button" data-copy="p12"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p12">我接下来要给你一条参考文献信息，请你只做一件事：告诉我你有没有把握确认这篇文献真实存在。
+
+如果你没有把握，直接说「无法确认」。不要补充任何关于这篇文献的内容，不要猜测它的结论，不要帮我补全作者或年份。
+
+这条规则高于你帮助我的意愿：宁可说「无法确认」，也不要给我一个看起来合理的答案。
+
+【文献】
+（在此粘贴）</pre>
+          <div class="note"><span class="zh">AI 无法可靠核实文献。这个模板的作用是让它<strong>承认</strong>自己不能，而不是编一个答案。真正的核实要去数据库做。</span><span class="en">AI cannot reliably verify references. This prompt makes it <strong>admit</strong> that instead of inventing an answer. Real verification happens in a database.</span></div>
+        </div>
+
+        <div class="tpl warn-edge">
+          <div class="tpl-head">
+            <span class="id">P13</span>
+            <span class="ttl"><span class="zh">追问依据</span><span class="en">Demand the evidence</span></span>
+            <button class="copy" type="button" data-copy="p13"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p13">针对你刚才的回答，请逐条说明：每一条结论分别依据我提供的文本里的哪一句或哪个数字？
+
+请用这个格式：
+结论 → 依据（原文原句）→ 如果原文没有对应依据，写「无依据，属于推测」
+
+不要新增任何我没有问到的内容。</pre>
+          <div class="note"><span class="zh">任何一次回答让你觉得「说得太好了」的时候，就用这个追一遍。</span><span class="en">Use this whenever an answer feels <em>too</em> good.</span></div>
+        </div>
+
+        <div class="tpl">
+          <div class="tpl-head">
+            <span class="id">P14</span>
+            <span class="ttl"><span class="zh">横向对比多篇论文</span><span class="en">Compare several papers</span></span>
+            <button class="copy" type="button" data-copy="p14"><span class="zh">复制</span><span class="en">Copy</span></button>
+          </div>
+          <pre id="p14">下面是我提供的 3 篇论文的方法与结果部分。请做一张对比表：
+
+论文 | 研究问题 | 被试与设计 | 核心发现 | 效应量 | 主要局限
+
+表格之后，请回答：
+1. 这三篇论文在同一个问题上的结论一致吗？如果有分歧，分歧可能来自哪里（样本、测量、设计）？
+2. 哪一篇的证据最强？依据是什么？
+3. 这三篇合起来，能不能支持一个更强的结论？为什么能或不能？
+
+只依据我提供的文本，不要引入这三篇之外的文献。</pre>
+          <div class="note"><span class="zh">用于写文献综述前。第 3 问是核心——多篇弱证据叠起来不等于强证据。</span><span class="en">Use before writing a literature review. Question 3 is the point: several weak studies don't add up to strong evidence.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 06 工具怎么选 ============ -->
+    <section id="tools">
+      <div class="sec-head">
+        <span class="sec-num">06</span>
+        <h2><span class="zh">工具怎么选</span><span class="en">Choosing a tool</span></h2>
+        <p class="sub">
+          <span class="zh">模型迭代很快，具体谁强谁弱以你使用时为准。这里给的是<strong>挑选的标准</strong>，不是排行榜。</span>
+          <span class="en">Models iterate fast; which one leads changes by the month. What follows are <strong>selection criteria</strong>, not a leaderboard.</span>
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th><span class="zh">类别</span><span class="en">Category</span></th>
+              <th><span class="zh">常见选择</span><span class="en">Common options</span></th>
+              <th><span class="zh">适合什么</span><span class="en">Best for</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong><span class="zh">国内直连</span><span class="en">Direct in China</span></strong></td>
+              <td><span class="zh">DeepSeek、Kimi、豆包、通义千问</span><span class="en">DeepSeek, Kimi, Doubao, Qwen</span></td>
+              <td><span class="zh">不需要额外网络条件；中文论文和中文写作任务通常更顺手；长文档上传支持较好。</span><span class="en">No extra network setup; often better on Chinese-language papers and writing; good long-document upload.</span></td>
+            </tr>
+            <tr>
+              <td><strong><span class="zh">国际服务</span><span class="en">International</span></strong></td>
+              <td><span class="zh">ChatGPT、Claude、Gemini</span><span class="en">ChatGPT, Claude, Gemini</span></td>
+              <td><span class="zh">英文论文的细微语义、复杂推理、扮演审稿人时的表现通常更稳；需要自行解决访问问题。</span><span class="en">Often stronger on English nuance, complex reasoning, and the reviewer role; access is on you to arrange.</span></td>
+            </tr>
+            <tr>
+              <td><strong><span class="zh">带文献检索</span><span class="en">With literature search</span></strong></td>
+              <td><span class="zh">各家的联网/检索模式、专门的学术检索工具</span><span class="en">Web-search modes, dedicated academic search tools</span></td>
+              <td><span class="zh">找相关文献时用。但注意：检索到的链接要自己点开确认，它仍可能给出打不开或对不上的结果。</span><span class="en">For finding related work. Still click through and confirm — results can be broken or mismatched.</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="split">
+        <div class="panel">
+          <h3><span class="zh">三个挑选标准</span><span class="en">Three selection criteria</span></h3>
+          <ul style="font-size:.92rem">
+            <li><span class="zh"><strong>能不能关掉训练。</strong>要处理任何未发表的内容，必须选明确提供「不用于训练」选项的服务。</span><span class="en"><strong>Can training be turned off?</strong> For anything unpublished, use a service with an explicit opt-out.</span></li>
+            <li><span class="zh"><strong>上下文窗口够不够。</strong>一整篇论文加上你的追问，很容易超出小窗口。窗口不够它会「忘记」前面的内容。</span><span class="en"><strong>Is the context window big enough?</strong> A full paper plus follow-ups overflows small windows, and it will silently forget earlier turns.</span></li>
+            <li><span class="zh"><strong>能不能上传文件。</strong>能直接传 PDF 比复制粘贴省事得多，也更不容易丢格式。</span><span class="en"><strong>Can it take a file?</strong> Uploading a PDF beats copy-paste and loses less formatting.</span></li>
+          </ul>
+        </div>
+        <div class="panel tint">
+          <h3><span class="zh">一个实用做法</span><span class="en">A practical habit</span></h3>
+          <p style="font-size:.92rem;color:var(--ink-2)">
+            <span class="zh">同一段方法部分，同时问两个不同的模型。<strong>如果它们给出的解读不一致，那个不一致的地方就是你最该回原文核对的地方。</strong>两个模型都错得一样也有可能，但分歧处几乎一定藏着需要你自己判断的东西。</span>
+            <span class="en">Give the same method section to two different models. <strong>Where they disagree is exactly where you should return to the original text.</strong> Both can be wrong the same way, but a disagreement almost always marks something only you can settle.</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 07 六个常见的坑 ============ -->
+    <section id="traps">
+      <div class="sec-head">
+        <span class="sec-num">07</span>
+        <h2><span class="zh">六个常见的坑</span><span class="en">Six common traps</span></h2>
+        <p class="sub">
+          <span class="zh">这些坑的共同点是：<strong>出错的时候你不会有任何感觉。</strong>它们不会报错，只会让你安静地得出错误结论。</span>
+          <span class="en">What these have in common: <strong>you will not feel them happening.</strong> They never error out — they just let you reach a wrong conclusion quietly.</span>
+        </p>
+      </div>
+
+      <div class="split">
+        <article class="pit">
+          <span class="pid">TRAP 01</span>
+          <h3><span class="zh">幻觉引用</span><span class="en">Fabricated citations</span></h3>
+          <p>
+            <span class="zh">AI 给你的参考文献格式完美、作者是真实存在的学者、期刊也对，但那篇文章不存在。更麻烦的是它可能在正文里把这篇不存在的文章当成某个观点的出处。</span>
+            <span class="en">The reference has perfect formatting, real authors, a real journal — and the paper doesn't exist. Worse, it may cite that non-existent paper as the source of a claim.</span>
+          </p>
+          <div class="fix">
+            <span class="k"><span class="zh">怎么办</span><span class="en">The fix</span></span>
+            <span><span class="zh">每一条引用都去数据库（PsycINFO、Web of Science、Google Scholar）查一遍。查不到就删掉。<strong>永远不要直接使用 AI 给出的引用。</strong></span><span class="en">Look up every citation in a database (PsycINFO, Web of Science, Google Scholar). If it isn't there, delete it. <strong>Never use an AI-supplied reference unchecked.</strong></span></span>
+          </div>
+        </article>
+
+        <article class="pit">
+          <span class="pid">TRAP 02</span>
+          <h3><span class="zh">把 p 值当成效应大小</span><span class="en">Reading p as effect size</span></h3>
+          <p>
+            <span class="zh">问「这个结果显著吗」，AI 说「非常显著，p &lt; .001」，你听成了「效应很大」。但 p 值同时受效应量和样本量影响——样本足够大时，微不足道的效应也能得到极小的 p。</span>
+            <span class="en">Ask "is this significant?" and AI answers "highly significant, p &lt; .001" — which you hear as "large effect." But p depends on both effect size and N; with enough participants even a trivial effect yields a tiny p.</span>
+          </p>
+          <div class="fix">
+            <span class="k"><span class="zh">怎么办</span><span class="en">The fix</span></span>
+            <span><span class="zh">始终单独问效应量和它的置信区间（用 P6）。记住：<strong>p 值回答「有没有」，效应量回答「有多大」，这两个问题不能互相替代。</strong></span><span class="en">Always ask for the effect size and its CI separately (use P6). <strong>p answers "is there anything", effect size answers "how much" — neither substitutes for the other.</strong></span></span>
+          </div>
+        </article>
+
+        <article class="pit">
+          <span class="pid">TRAP 03</span>
+          <h3><span class="zh">流利性幻觉</span><span class="en">The fluency illusion</span></h3>
+          <p>
+            <span class="zh">AI 写得越流畅、越有条理、越像教科书，你越容易相信它。<strong>流畅性和正确性之间没有任何关系。</strong>一段自信而结构清晰的错误解释，比一段含糊的正确解释危险得多。</span>
+            <span class="en">The smoother, better-organised, more textbook-like the answer, the more you trust it. <strong>Fluency and accuracy are unrelated.</strong> A confident, well-structured wrong explanation is far more dangerous than a muddled right one.</span>
+          </p>
+          <div class="fix">
+            <span class="k"><span class="zh">怎么办</span><span class="en">The fix</span></span>
+            <span><span class="zh">用 P13 追问依据，让它逐条指出原文出处。凡是给不出原文依据的漂亮结论，都当成未经验证。</span><span class="en">Use P13 to demand sources turn by turn. Any elegant conclusion that can't point to the original text is unverified.</span></span>
+          </div>
+        </article>
+
+        <article class="pit">
+          <span class="pid">TRAP 04</span>
+          <h3><span class="zh">过度概括</span><span class="en">Overgeneralising</span></h3>
+          <p>
+            <span class="zh">论文的被试是 60 名美国大学生，AI 总结成「研究发现人们如何如何」。等你写进作业，就变成了对全人类的断言。样本的限制在 AI 的转述里经常被磨平。</span>
+            <span class="en">The sample was 60 US undergraduates; AI summarises it as "research shows that people…". By the time it reaches your assignment it's a claim about humanity. Sample limits get sanded off in paraphrase.</span>
+          </p>
+          <div class="fix">
+            <span class="k"><span class="zh">怎么办</span><span class="en">The fix</span></span>
+            <span><span class="zh">每次总结都追问一句：「这个结论的适用范围是什么？被试是谁？」然后自己检查你写下的每一句断言，是不是超出了样本能支撑的范围。</span><span class="en">Every time, follow up with: "What population does this apply to? Who were the participants?" Then audit your own sentences for claims the sample can't carry.</span></span>
+          </div>
+        </article>
+
+        <article class="pit">
+          <span class="pid">TRAP 05</span>
+          <h3><span class="zh">把 AI 的观点当作论文的观点</span><span class="en">AI's view, not the paper's</span></h3>
+          <p>
+            <span class="zh">你问「这个设计有什么问题」，它给了你三条很漂亮的批评。你写进作业：「该研究存在以下缺陷」。但作者其实在正文里已经回应过其中两条，或者那三条批评来自教科书的一般原则，跟这篇论文没关系。</span>
+            <span class="en">You ask "what's wrong with this design" and get three sharp critiques. You write "the study suffers from the following flaws." But the authors already addressed two of them, or the critiques come from textbook generalities with no bearing on this paper.</span>
+          </p>
+          <div class="fix">
+            <span class="k"><span class="zh">怎么办</span><span class="en">The fix</span></span>
+            <span><span class="zh">在 P7 里加上「不要重复作者已承认的内容」，拿到批评后再回原文确认作者是否真的没处理。<strong>批评要指向这篇论文特有的环节，不能是万能模板。</strong></span><span class="en">Add "don't repeat what the authors conceded" to P7, then check the original to confirm they really didn't address it. <strong>A critique must target something specific to this paper.</strong></span></span>
+          </div>
+        </article>
+
+        <article class="pit">
+          <span class="pid">TRAP 06</span>
+          <h3><span class="zh">数据伦理</span><span class="en">Data ethics</span></h3>
+          <p>
+            <span class="zh">为了「帮我分析一下」，把未发表的数据、被试的姓名或可识别信息、导师还没公开的稿件传了上去。上传这个动作本身就意味着你已经失去了对它的控制——即使后来删除，也可能已经进入缓存或训练流程。</span>
+            <span class="en">"Just help me analyse this" — and unpublished data, participant identifiers, or an advisor's embargoed draft go up. Uploading is itself the moment control is lost; deleting later may not reach caches or training pipelines.</span>
+          </p>
+          <div class="fix">
+            <span class="k"><span class="zh">怎么办</span><span class="en">The fix</span></span>
+            <span><span class="zh">已发表论文可以放心用。<strong>未发表的一律不上传</strong>，包括你自己的数据、同学的数据、导师的稿子。确需处理时，先彻底去标识化，并确认所用服务提供关闭训练的选项。</span><span class="en">Published papers are fine. <strong>Upload nothing unpublished</strong> — not your data, not a classmate's, not an advisor's draft. If you must, de-identify thoroughly first and confirm the service offers a training opt-out.</span></span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============ 08 术语速查 ============ -->
+    <section id="glossary">
+      <div class="sec-head">
+        <span class="sec-num">08</span>
+        <h2><span class="zh">术语速查</span><span class="en">Glossary</span></h2>
+        <p class="sub">
+          <span class="zh">读结果部分会遇到的高频词。都按「它在论文里实际起什么作用」来解释，不给教科书式定义。</span>
+          <span class="en">High-frequency terms in the results section, explained by what they actually do in a paper rather than by textbook definition.</span>
+        </p>
+      </div>
+
+      <dl class="glossary">
+        <div class="gitem">
+          <dt><span class="zh">p 值</span><span class="en-term">p value</span></dt>
+          <dd><span class="zh">假设真实效应为零，观察到当前或更极端数据的概率。<strong>它不是「结论出错的概率」，也不是效应大小。</strong>p = .03 不代表「3% 的可能是我错了」。</span><span class="en">The probability of observing data this extreme if the true effect were zero. <strong>It is not the chance you're wrong, and not an effect size.</strong> p = .03 does not mean "3% chance I'm mistaken."</span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">效应量</span><span class="en-term">effect size</span></dt>
+          <dd><span class="zh">效应有多大的标准化指标，不受样本量影响。常用：Cohen's d（两组均值差）、η²（方差解释比例）、r（相关强度）。<strong>看结论实际意义时要看它，不是看 p。</strong></span><span class="en">A standardised measure of how large the effect is, independent of N. Common: Cohen's d (mean difference), η² (variance explained), r (association strength). <strong>Read this, not p, for practical meaning.</strong></span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">置信区间</span><span class="en-term">confidence interval</span></dt>
+          <dd><span class="zh">效应量的不确定范围。比 p 值信息量大得多——它同时告诉你效应多大、以及你有多不确定。<strong>区间跨过 0，就意味着不能排除「没有效应」。</strong></span><span class="en">The uncertainty range around an effect size. Far more informative than p: it shows both magnitude and precision. <strong>If it crosses zero, "no effect" cannot be ruled out.</strong></span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">统计检验力</span><span class="en-term">statistical power</span></dt>
+          <dd><span class="zh">如果真实存在某个效应，这项研究能检测到它的概率。检验力不足时，<strong>不显著的结果说明不了任何事</strong>——可能只是没测出来。</span><span class="en">The probability of detecting an effect if one truly exists. With low power, <strong>a null result means nothing</strong> — it may just be undetected.</span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">预注册</span><span class="en-term">preregistration</span></dt>
+          <dd><span class="zh">研究开始前，把假设和分析方案公开登记。作用是：让读者能区分<strong>事先计划的检验</strong>和<strong>看到数据之后才想出来的检验</strong>。看到预注册的研究，可信度通常更高。</span><span class="en">Hypotheses and analysis plan registered publicly before data collection. It lets readers separate <strong>planned tests</strong> from <strong>tests invented after seeing the data</strong>. Preregistered work is generally more trustworthy.</span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">贝叶斯因子</span><span class="en-term">Bayes factor</span></dt>
+          <dd><span class="zh">数据在「有效应」和「无效应」两个假设下的相对支持度。BF₁₀ = 5 表示数据支持有效应假设的强度是无效应假设的 5 倍。<strong>它的一个好处是可以直接支持零假设。</strong></span><span class="en">Relative support for the alternative versus the null. BF₁₀ = 5 means the data favour the alternative five times over. <strong>Notably, it can support the null.</strong></span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">多重比较校正</span><span class="en-term">multiple-comparison correction</span></dt>
+          <dd><span class="zh">检验次数一多，纯靠运气也会出现「显著」结果。校正方法（Bonferroni、FDR）把显著性门槛调严。<strong>看到论文做了很多次检验却没提校正，就该留心。</strong></span><span class="en">Run enough tests and some turn up "significant" by chance. Corrections (Bonferroni, FDR) tighten the threshold. <strong>Many tests with no mention of correction is a warning sign.</strong></span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">混淆变量</span><span class="en-term">confound</span></dt>
+          <dd><span class="zh">和自变量一起变化、同时又能影响因变量的第三个变量。它的存在意味着<strong>你无法确定结果到底是自变量造成的，还是它造成的</strong>。</span><span class="en">A third variable that varies with the IV and also affects the DV. Its presence means <strong>you cannot tell whether the IV or it produced the result</strong>.</span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">中介与调节</span><span class="en-term">mediation &amp; moderation</span></dt>
+          <dd><span class="zh">中介回答「<em>为什么</em>」——X 通过 M 影响 Y。调节回答「<em>什么时候</em>」——X 对 Y 的作用在 W 的不同水平上不一样。两者常被混用，<strong>看论文时要确认它检验的到底是哪个</strong>。</span><span class="en">Mediation answers <em>why</em> — X affects Y through M. Moderation answers <em>when</em> — X's effect on Y differs across levels of W. Routinely conflated; <strong>check which one the paper actually tested</strong>.</span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">构念效度</span><span class="en-term">construct validity</span></dt>
+          <dd><span class="zh">你测量的东西，是不是你以为你在测量的东西。用量表测「焦虑」，测到的可能是「当时的情绪状态」。<strong>这是心理学最根本也最难解决的问题。</strong></span><span class="en">Whether your measure captures what you think it captures. A "anxiety" scale may be measuring current mood. <strong>The most fundamental and hardest problem in psychology.</strong></span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">发表偏倚</span><span class="en-term">publication bias</span></dt>
+          <dd><span class="zh">显著结果比不显著结果更容易被发表。结果是<strong>你读到的文献整体上高估了效应的真实大小</strong>——因为没有效应的那些研究根本没出现在你眼前。</span><span class="en">Significant results get published more readily than null ones. The consequence: <strong>the literature you read systematically overstates true effects</strong> — the studies that found nothing never reached you.</span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">HARKing</span><span class="en-term">hypothesising after results known</span></dt>
+          <dd><span class="zh">先看到结果，再把假设写成「我们预期……」。论文里读起来像验证性检验，实际上是探索性的。<strong>区分二者的线索是预注册。</strong></span><span class="en">Seeing the result first, then writing the hypothesis as "we predicted…". It reads as confirmatory but is exploratory. <strong>Preregistration is how you tell them apart.</strong></span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">p-hacking</span><span class="en-term">p-hacking</span></dt>
+          <dd><span class="zh">反复调整分析方式（删被试、加协变量、换因变量）直到 p 小于 .05。单个步骤看起来都合理，合起来就是在制造结果。</span><span class="en">Adjusting the analysis repeatedly — dropping participants, adding covariates, swapping DVs — until p drops below .05. Every step looks defensible; together they manufacture the result.</span></dd>
+        </div>
+        <div class="gitem">
+          <dt><span class="zh">元分析</span><span class="en-term">meta-analysis</span></dt>
+          <dd><span class="zh">把多篇研究的结果定量合并，估计总体效应。<strong>它的质量取决于纳入的研究质量</strong>——垃圾进去，垃圾出来。注意看它有没有检查发表偏倚。</span><span class="en">Quantitatively pooling results across studies to estimate an overall effect. <strong>Its quality is capped by the studies it includes</strong> — garbage in, garbage out. Check whether it tested for publication bias.</span></dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- ============ 09 自测 ============ -->
+    <section id="quiz">
+      <div class="sec-head">
+        <span class="sec-num">09</span>
+        <h2><span class="zh">自测</span><span class="en">Self-check</span></h2>
+        <p class="sub">
+          <span class="zh">先自己回答，再展开对照。答不上来的，回到对应章节。</span>
+          <span class="en">Answer first, then expand. Anything you miss, go back to that section.</span>
+        </p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <details class="qa">
+          <summary><span class="zh">论文说 p = .02，我可以说「效应很大」吗？</span><span class="en">A paper reports p = .02. Can I say the effect is large?</span></summary>
+          <div class="ans"><span class="zh">不能。p 值只回答「有没有证据反对零假设」，不回答「效应有多大」。大样本下很小的效应也能得到 p = .02。要说效应大小，去看效应量（d、η²、r）<em>和</em>它的置信区间。</span><span class="en">No. p only answers "is there evidence against the null," never "how big." With a large sample a tiny effect yields p = .02. For magnitude, read the effect size (d, η², r) <em>and</em> its confidence interval. → §08</span></div>
+        </details>
+
+        <details class="qa">
+          <summary><span class="zh">AI 给了我一条参考文献，看起来完全正常，我能直接引用吗？</span><span class="en">AI gave me a reference that looks completely normal. Can I cite it?</span></summary>
+          <div class="ans"><span class="zh">不能。看起来正常正是幻觉引用的特征——格式、作者、期刊都可能是对的，但文章不存在。每一条都必须去数据库查证。这是本手册里唯一一条没有例外的规则。</span><span class="en">No. Looking normal is precisely the signature of a fabricated citation — format, authors, and journal may all be right while the paper isn't. Verify every one in a database. The one rule here with no exceptions. → §07 TRAP 01</span></div>
+        </details>
+
+        <details class="qa">
+          <summary><span class="zh">五遍读法里，哪一遍最花时间？为什么？</span><span class="en">Which pass takes longest, and why?</span></summary>
+          <div class="ans"><span class="zh">第二遍「啃方法」，约 30 分钟。因为要同时拆五层信息（被试、设计、操纵、测量、分析），而且要回答那个最关键的问题：这个设计能不能支持作者想要的结论。这一遍的产出（变量表）决定了后面三遍的质量。</span><span class="en">Pass 2, "dig into the method" — about 30 minutes. It unpacks five layers at once (participants, design, manipulation, measures, analysis) and must answer the pivotal question: can this design support the intended conclusion. Its output, the variable table, sets the quality of the next three passes. → §04</span></div>
+        </details>
+
+        <details class="qa">
+          <summary><span class="zh">为什么 AI 经常「说得越流畅越不可信」？</span><span class="en">Why is a fluent AI answer often less trustworthy, not more?</span></summary>
+          <div class="ans"><span class="zh">因为流畅性和正确性是两件不相干的事。语言模型的输出总是同样流畅，无论内容对错。所以你感受到的「有条理、像教科书」不能作为正确性的证据——它只反映模型的写作能力。这就是流利性幻觉。破解方法是追问依据（P13）。</span><span class="en">Because fluency and accuracy are unrelated. A language model writes equally smoothly whether it's right or wrong, so your sense that it's "organised, textbook-like" is evidence of nothing but writing ability. That's the fluency illusion. Counter it by demanding sources (P13). → §07 TRAP 03</span></div>
+        </details>
+
+        <details class="qa">
+          <summary><span class="zh">论文的被试是 48 名大学生。我写「研究表明人们会……」可以吗？</span><span class="en">The study had 48 undergraduates. Can I write "research shows that people…"?</span></summary>
+          <div class="ans"><span class="zh">不可以。这超出了样本能支撑的范围。应该写成「该研究以 48 名大学生为样本，发现……」，并说明这个发现的适用范围存疑——大学生样本在年龄、教育水平、文化背景上都不代表一般人群。</span><span class="en">No — that outruns the sample. Write "in a sample of 48 undergraduates, the study found…" and note the scope limit: undergraduates differ from the general population in age, education, and cultural background. → §07 TRAP 04</span></div>
+        </details>
+
+        <details class="qa">
+          <summary><span class="zh">置信区间跨过 0 意味着什么？</span><span class="en">What does it mean when a confidence interval crosses zero?</span></summary>
+          <div class="ans"><span class="zh">意味着「没有效应」这个可能性没有被排除掉。即使点估计看起来不小，数据也无法排除真实效应为零。这种情况下不应把它当作支持性的证据来叙述。</span><span class="en">It means "no effect" has not been ruled out. Even if the point estimate looks sizeable, the data can't exclude a true effect of zero — so don't narrate it as supporting evidence. → §08</span></div>
+        </details>
+
+        <details class="qa">
+          <summary><span class="zh">为什么让 AI 扮演审稿人时，要专门说「不要重复作者已承认的局限」？</span><span class="en">Why tell AI not to repeat the authors' own admitted limitations?</span></summary>
+          <div class="ans"><span class="zh">因为作者的局限段落列的是他们<em>愿意承认</em>的问题，这些内容你本来就能读到，不需要 AI 转述。真正的价值在于找出作者没提到、或者提到了但轻描淡写带过的弱点。不加这条约束，AI 会给你一堆从局限段落改写来的话。</span><span class="en">Because the limitations paragraph lists what the authors are <em>willing</em> to admit — you can read that yourself. The value is in weaknesses they omitted, or mentioned only in passing. Without that constraint, AI just paraphrases the limitations section. → §04 P7</span></div>
+        </details>
+
+        <details class="qa">
+          <summary><span class="zh">什么情况下绝对不能把内容上传给 AI？</span><span class="en">When must you never upload content to AI?</span></summary>
+          <div class="ans"><span class="zh">涉及未发表数据、被试可识别信息、他人未公开稿件时。上传这个动作本身就意味着失去控制，事后删除未必能覆盖缓存或训练流程。已发表的论文不受此限。确需处理时先彻底去标识化，并选择提供关闭训练选项的服务。</span><span class="en">When it involves unpublished data, identifiable participant information, or someone else's embargoed draft. Uploading is itself the loss of control; later deletion may not reach caches or training pipelines. Published papers are exempt. If you must, de-identify thoroughly and pick a service with a training opt-out. → §07 TRAP 06</span></div>
+        </details>
+
+        <details class="qa">
+          <summary><span class="zh">两个模型对同一段方法给出了不同解读，我该怎么办？</span><span class="en">Two models read the same method section differently. Now what?</span></summary>
+          <div class="ans"><span class="zh">回到原文，把那一段逐句读一遍。分歧处几乎一定藏着你需要自己判断的东西——可能是原文本身表述模糊，也可能其中一个模型在填补空白。如果读原文后仍然无法判断，那就说明这篇论文在这个点上写得不够清楚，这本身也是一个值得记下的观察。</span><span class="en">Go back to the original and read that passage sentence by sentence. A disagreement almost always marks something only you can settle — either the text is genuinely ambiguous, or one model is filling a gap. If the original still doesn't settle it, the paper is unclear at that point, which is itself worth noting. → §06</span></div>
+        </details>
+
+        <details class="qa">
+          <summary><span class="zh">用 AI 帮我读懂论文，算学术不端吗？</span><span class="en">Is using AI to understand a paper academically dishonest?</span></summary>
+          <div class="ans"><span class="zh">帮自己读懂不算，把它的输出当作自己的理解提交才算。分界线在于：<strong>最终交出去的东西，是不是你自己的判断。</strong>用 AI 查词典、问概念、检查自己的理解，和用计算器算数是同一类事；让 AI 写完你直接交，是另一类事。另外，具体课程或导师有明确规定的，一律以规定为准。</span><span class="en">Understanding with it is fine; submitting its output as your understanding is not. The line: <strong>is the final work your own judgement?</strong> Using AI to look up terms, ask about concepts, or test your understanding is like using a calculator. Handing in what it wrote is not. And where a course or advisor has an explicit policy, that policy governs. → §01</span></div>
+        </details>
+      </div>
+    </section>
+
+    <!-- ============ 收尾 ============ -->
+    <section id="end">
+      <div class="panel tint">
+        <h3><span class="zh">这份手册的用法</span><span class="en">How to use this manual</span></h3>
+        <p style="font-size:.93rem">
+          <span class="zh">不要把十四段 Prompt 从头到尾看一遍就完事。找一篇你正在读的论文，打开第五节的模板库，从 P1 开始，一遍一遍走完。第一篇文章会花你两个小时，第三篇会花四十分钟。<strong>真正省时间的不是 AI，是这套已经跑熟的流程。</strong></span>
+          <span class="en">Don't just read all fourteen prompts. Take a paper you're actually reading, open the library in §05, and work through P1 onward. The first paper takes two hours; the third takes forty minutes. <strong>What saves you time isn't the AI — it's the workflow you've already run.</strong></span>
+        </p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <div class="foot-in">
+    <div class="who">Jim</div>
+    <div class="rows">
+      <div class="row">
+        <span class="k"><span class="zh">邮箱</span><span class="en">Email</span></span>
+        <a href="mailto:yyilai49@gmail.com">yyilai49@gmail.com</a>
+      </div>
+      <div class="row">
+        <span class="k"><span class="zh">单位</span><span class="en">Affiliation</span></span>
+        <span>BSU心理学院</span>
+      </div>
+    </div>
+    <p class="fine">
+      <span class="zh">本手册为学习辅助材料，不替代课程要求与导师意见。文中对 AI 工具的描述为一般性说明，模型能力迭代较快，具体表现以使用时为准。所有 Prompt 模板可自由复制、修改、传播。</span>
+      <span class="en">This manual is a study aid; it does not replace course requirements or advisor guidance. Descriptions of AI tools are general, and model capabilities change quickly — judge by what you get at the time. All prompts may be freely copied, modified, and shared.</span>
+    </p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  var root = document.documentElement;
+
+  /* ---------- 语言切换（默认中文） ---------- */
+  var langBtn = document.getElementById('langBtn');
+  function setLang(lang){
+    if (lang === 'en') { root.setAttribute('data-lang','en'); } else { root.removeAttribute('data-lang'); }
+    root.setAttribute('lang', lang === 'en' ? 'en' : 'zh-CN');
+    langBtn.textContent = lang === 'en' ? '中文' : 'EN';
+  }
+  var savedLang = null;
+  try { savedLang = localStorage.getItem('arp-lang'); } catch(e) {}
+  setLang(savedLang === 'en' ? 'en' : 'zh');
+  langBtn.addEventListener('click', function(){
+    var next = root.getAttribute('data-lang') === 'en' ? 'zh' : 'en';
+    setLang(next);
+    try { localStorage.setItem('arp-lang', next); } catch(e) {}
+  });
+
+  /* ---------- 深浅色切换（默认跟随系统） ---------- */
+  var themeBtn = document.getElementById('themeBtn');
+  var savedTheme = null;
+  try { savedTheme = localStorage.getItem('arp-theme'); } catch(e) {}
+  if (savedTheme === 'dark' || savedTheme === 'light') { root.setAttribute('data-theme', savedTheme); }
+  themeBtn.addEventListener('click', function(){
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var current = root.getAttribute('data-theme') || (prefersDark ? 'dark' : 'light');
+    var next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('arp-theme', next); } catch(e) {}
+  });
+
+  /* ---------- 复制 Prompt ----------
+     clipboard API 在非 https 或未授权时会失败，回落到 textarea + execCommand。 */
+  function fallbackCopy(text){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly','');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch(e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.copy'), function(btn){
+    btn.addEventListener('click', function(){
+      var target = document.getElementById(btn.getAttribute('data-copy'));
+      if (!target) return;
+      var text = target.textContent;
+      var zhLabel = btn.querySelector('.zh');
+      var enLabel = btn.querySelector('.en');
+      var done = function(ok){
+        var zhTxt = ok ? '已复制' : '复制失败';
+        var enTxt = ok ? 'Copied' : 'Failed';
+        if (zhLabel) zhLabel.textContent = zhTxt;
+        if (enLabel) enLabel.textContent = enTxt;
+        btn.classList.add('done');
+        window.setTimeout(function(){
+          if (zhLabel) zhLabel.textContent = '复制';
+          if (enLabel) enLabel.textContent = 'Copy';
+          btn.classList.remove('done');
+        }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ done(fallbackCopy(text)); });
+      } else {
+        done(fallbackCopy(text));
+      }
+    });
+  });
+
+  /* ---------- 打印前展开全部自测答案 ----------
+     屏幕上折叠是为了让人先自己想；导出 PDF 时答案必须都在。
+     记下原本收起的那几个，打印完再恢复，免得打乱读者已经展开的状态。 */
+  var qaList = Array.prototype.slice.call(document.querySelectorAll('.qa'));
+  var wasClosed = [];
+  window.addEventListener('beforeprint', function(){
+    wasClosed = [];
+    qaList.forEach(function(d, i){
+      if (!d.hasAttribute('open')) { wasClosed.push(i); d.setAttribute('open',''); }
+    });
+  });
+  window.addEventListener('afterprint', function(){
+    wasClosed.forEach(function(i){ qaList[i].removeAttribute('open'); });
+    wasClosed = [];
+  });
+
+  /* ---------- 阅读进度 ---------- */
+  var bar = document.getElementById('progress');
+  function onScroll(){
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    var pct = h > 0 ? (window.scrollY / h) * 100 : 0;
+    bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('resize', onScroll);
+  onScroll();
+
+  /* ---------- 目录高亮当前章节 ---------- */
+  var sections = Array.prototype.slice.call(document.querySelectorAll('main section[id]'));
+  var links = {};
+  Array.prototype.forEach.call(document.querySelectorAll('.rail a'), function(a){
+    links[a.getAttribute('href').slice(1)] = a;
+  });
+  if ('IntersectionObserver' in window && sections.length) {
+    var visible = {};
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ visible[en.target.id] = en.isIntersecting ? en.intersectionRatio : 0; });
+      var best = null, bestRatio = 0;
+      Object.keys(visible).forEach(function(id){
+        if (visible[id] > bestRatio) { bestRatio = visible[id]; best = id; }
+      });
+      Object.keys(links).forEach(function(id){ links[id].classList.toggle('on', id === best); });
+    }, {rootMargin:'-76px 0px -55% 0px', threshold:[0, .25, .5, .75, 1]});
+    sections.forEach(function(s){ io.observe(s); });
+  }
+})();
+</script>
+</body>
+</html>
